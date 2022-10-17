@@ -1,0 +1,23 @@
+/*** Estilo personalización servicios Node-Red ***/ 
+/* background color del toolbar (código color: en excel de servicios)*/
+#red-ui-header{
+    background: #d67d17 !important;
+}
+
+/* color para los botones de la parte derecha(Temas claros: #4d4d4d; Temas oscuros: #7c7c7c) */
+#red-ui-header .button{
+    border-left: none !important;
+    border-right: none !important;
+    color: #4e4545 !important;
+}
+
+/* Tamaño y color del nombre del servicio */
+#red-ui-header span.red-ui-header-logo span {
+    font-size: 3vh !important;
+    color: #494242 !important;
+}
+
+/* Tamaño del logo de tecdesoft */
+#red-ui-header span.red-ui-header-logo img {
+    height: 3vh !important;
+}

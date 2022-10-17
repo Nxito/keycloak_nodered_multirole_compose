@@ -1,0 +1,129 @@
+version: '3.7'
+
+services:
+   #Proxy nginx
+   proxy:
+      image: proxy:0.1.0
+      restart: on-failure
+      build:
+         context: ./proxy
+         dockerfile: Dockerfile.dev
+      ports:
+         - '80:80'
+         # - '443:443'
+      volumes:
+         - ./proxy/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+         - ./proxy/config:/usr/local/openresty/nginx/conf/api_conf
+      environment:
+         KC_INTERNAL_ENDPOINT: ${KEYCLOAK_INTERNAL_ENDPOINT}
+         KC_EXTERNAL_ENDPOINT: ${KEYCLOAK_EXTERNAL_ENDPOINT}
+         # KC_LOGOUT_REDIRECT_URI: ${KEYCLOAK_LOGOUT_REDIRECT_URI}
+         KC_LOGOUT_URI: ${KEYCLOAK_LOGOUT_URI}
+         KC_REALM: ${KC_REALM}
+         KC_CLIENT_ADMIN: ${KC_CLIENT_ADMIN}
+         KC_CLIENT_ADMIN_PASS: ${KC_CLIENT_ADMIN_PASS}
+         KC_CLIENT_ADMIN_ROLES: ${KC_CLIENT_ADMIN_ROLES}
+         KC_CLIENT_ADMIN_LOGIN_URI: ${KEYCLOAK_CLIENT_ADMIN_LOGIN_URI}
+         KC_CLIENT_APP: ${KC_CLIENT_APP}
+         KC_CLIENT_APP_PASS: ${KC_CLIENT_APP_PASS}
+         KC_CLIENT_APP_ROLES: ${KC_CLIENT_APP_ROLES}
+         KC_CLIENT_APP_LOGIN_URI: ${KEYCLOAK_CLIENT_APP_LOGIN_URI}
+   #keycloak
+   keycloak:
+      restart: on-failure
+      image: jboss/keycloak
+      volumes:
+         - ./keycloak/imports:/opt/jboss/keycloak/imports
+         - ./keycloak/themes/custom_login:/opt/jboss/keycloak/themes/custom_login/
+
+      environment:
+         KEYCLOAK_IMPORT: /opt/jboss/keycloak/imports/realm.json -Dkeycloak.profile.feature.upload_scripts=enabled
+         DB_VENDOR: POSTGRES
+         DB_ADDR: database
+         DB_DATABSE: keycloak
+         DB_USER: ${POSTGRES_USER}
+         DB_SCHEMA: public
+         DB_PASSWORD: ${POSTGRES_PASSWORD}
+         KEYCLOAK_USER: admin
+         KEYCLOAK_PASSWORD: password
+         KEYCLOAK_HOSTNAME: ${KEYCLOAK_EXTERNAL_ENDPOINT}
+         # ${authBaseUrl}
+         # KEYCLOAK_FRONTEND_URL: /auth
+
+      ports:
+         - 3333:8080
+      depends_on:
+         - database
+      # networks:
+      #    - net
+   #database
+   database:
+      image: db:0.1.0
+      restart: on-failure
+      build:
+         context: ./database
+         dockerfile: Dockerfile
+      environment:
+         POSTGRES_USER: ${POSTGRES_USER}
+         POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+         POSTGRES_PORT: 5432
+         PGDATA: /var/lib/postgresql/data/pgdata
+      ports:
+         - '5432:5432'
+      volumes:
+         # - ./database/sql/:/docker-entrypoint-initdb.d/
+         # - ./database/sql/test/:/docker-entrypoint-initdb.d/
+         - postgres_data:/var/lib/postgresql/data/pgdata
+
+   #Node.red
+   server_core:
+      image: server_core:0.1.0
+      build:
+         context: ./server-core
+         dockerfile: Dockerfile.dev
+      restart: on-failure
+      environment:
+         - TZ=Europe/Amsterdam
+      volumes:
+         - server_core-data:/data
+         # Rewrite flows.json
+         # - "./server-core/node-red/flows.json:/data/flows.json"
+   external_api:
+      image: external_api:0.1.0
+      build:
+         context: ./external-api
+         dockerfile: Dockerfile.dev
+      restart: on-failure
+      environment:
+         - TZ=Europe/Amsterdam
+      volumes:
+         - external_api-data:/data
+
+   engine01:
+      build:
+         context: ./audit-engine
+         dockerfile: Dockerfile.dev
+      restart: on-failure
+      environment:
+         - TZ=Europe/Amsterdam
+      volumes:
+         - engine01_data:/data
+         - ../audits/:/data/audits/
+
+   engine02:
+      build:
+         context: ./audit-engine
+         dockerfile: Dockerfile.dev
+      restart: on-failure
+      environment:
+         - TZ=Europe/Amsterdam
+      volumes:
+         - engine02_data:/data
+         - ../audits/:/data/audits/
+
+volumes:
+   server_core-data:
+   engine01_data:
+   engine02_data:
+   postgres_data:
+   external_api-data:

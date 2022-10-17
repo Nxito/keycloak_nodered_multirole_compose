@@ -1,0 +1,2587 @@
+[
+    {
+        "id": "53f8a525.723afc",
+        "type": "tab",
+        "label": "API",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "b57cbec5.0ac86",
+        "type": "tab",
+        "label": "Visores",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "e5bcb1b9.5df64",
+        "type": "subflow",
+        "name": "Set Instance Status",
+        "info": "Control de estados por lo que pasa una instancia en función de la acción de entrada. Se tendrá un control de la instancia que se indique, si existe o no.\n\n### INPUT\nprocess_definition: String que contendrá el código correspondiente al proceso de auditoría que ha sido seleccionado.\n\n`msg.payload`: Mensaje por el que llegará el idenificador único (UUID) de la instancia a la que se quiere indicar un nuevo estado.\n\nAction: acción o transición que desea realizar. Que cambio de estado se desea modificar. \n\n### OUTPUT\n`msg.payload`: En este mensaje se tendrá diferente información. \n - Características modificadas en la instancia correspondiente. (UPDATE)\n - Datos registrados como control de los diferentes estados por los que ha pasado una instancia. (INSERT)\n\n###  DETAILS\nComo entrada de este nodo se obtiene el UUID de la instancia, el código de proceso y a mayores la transición de estado que se desea realizar.  \n\nUna vez obtenido todos esos datos necesarios se comprueba la existencia de esa instancia con ese identificador único y que ertenezca al proceso indicado.\n - CORRECTO: Se recogen los datos Característicos de la instancia, como es el estado. A mayores se sigue teniendo en el mensaje la transición que se desea realizar.\n - INCORRECTO:No se realiza ninguna acción. Debido al control de errores se genera un mensaje de notificación del error.\n\nUna vez realizada dicha comprobación, se obtendrá los datos característicos de la instancia, como por ejemplo su estado actual. \nPara la actualización de su estados se indica el estado actual y la transición. Tras pasar por las comprobaciones de valides si es posible ese cambio de estado o transición:\n - Se notificará un error si la transición no existe o no puede realizarse en el estado en el que se está.\n - Si es posible dicha transición\n    * Se agregará una nueva `instance_event_stream`para llevar de forma más sencilla los diferentes cambios que ha tenido una instancia. En este evento de instancia se agregarán las características importantes junto con el estado al que se actualizó.\n     * Se actualizará la `instance`.\n\nComo salida se obtiene los datos insertados y actualizado junto a un mensaje de error.  Dicho mensaje indicará si se ha producido algún fallo en el proceso. \n> _En el caso de que se produce un fallo el nuevo envento de instancia y la actualización del estado de la instancia no se realizarán._\n",
+        "category": "",
+        "in": [
+            {
+                "x": 60,
+                "y": 100,
+                "wires": [
+                    {
+                        "id": "785a729d.c4427c"
+                    }
+                ]
+            }
+        ],
+        "out": [
+            {
+                "x": 1480,
+                "y": 60,
+                "wires": [
+                    {
+                        "id": "7d7d308a.e7c94",
+                        "port": 0
+                    },
+                    {
+                        "id": "b535a00d.3f50d",
+                        "port": 0
+                    }
+                ]
+            }
+        ],
+        "env": [
+            {
+                "name": "Action",
+                "type": "str",
+                "value": "INITIATE",
+                "ui": {
+                    "type": "select",
+                    "opts": {
+                        "opts": [
+                            {
+                                "l": {
+                                    "en-US": "INITIATE"
+                                },
+                                "v": "INITIATE"
+                            },
+                            {
+                                "l": {
+                                    "en-US": "SUBMIT"
+                                },
+                                "v": "SUBMIT"
+                            },
+                            {
+                                "l": {
+                                    "en-US": "CANCEL"
+                                },
+                                "v": "CANCEL"
+                            },
+                            {
+                                "l": {
+                                    "en-US": "COMPLETE"
+                                },
+                                "v": "COMPLETE"
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "ErrorLaunchType",
+                "type": "str",
+                "value": "1",
+                "ui": {
+                    "icon": "font-awesome/fa-exclamation",
+                    "label": {
+                        "en-US": "ErrorLaunchType"
+                    },
+                    "type": "select",
+                    "opts": {
+                        "opts": [
+                            {
+                                "l": {
+                                    "en-US": "Throw error"
+                                },
+                                "v": "0"
+                            },
+                            {
+                                "l": {
+                                    "en-US": "Send in msg"
+                                },
+                                "v": "1"
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "process_definition",
+                "type": "str",
+                "value": "",
+                "ui": {
+                    "label": {
+                        "en-US": "Process Definition Code"
+                    },
+                    "type": "input",
+                    "opts": {
+                        "types": [
+                            "str"
+                        ]
+                    }
+                }
+            }
+        ],
+        "color": "#DDAA99",
+        "status": {
+            "x": 260,
+            "y": 260,
+            "wires": [
+                {
+                    "id": "6d29944f.a131dc",
+                    "port": 0
+                }
+            ]
+        }
+    },
+    {
+        "id": "ec5b7153.50869",
+        "type": "subflow",
+        "name": "New Instance",
+        "info": "Comprobación de la existencia del proceso que se ha seleccionado.\nSi es correcto se creará una nueva instancia en la base de datos por cada auditoría creada.\n### INPUT\nprocess_definition: String que contendrá el código correspondiente al proceso de auditoría que ha sido seleccionado.\n### OUTPUT\n`msg.payload`: En este mentaje indicaremos las propiadades añadidas de la nueva instancia creada.\n### DETAILS\nA la entrada de este subflow se obtiene el código de un proceso que se quiere realizar.(`process_definition`).\n\nPrimero se comprueba si esa codificación está definida en la base de datos.\n - Codigo OK: Se recogen, junto al Código del procesos, las propiedades como la definición y el nombre del proceso.\n - Codigo NOK: No se obtiene ningún dato. Por lo que se tendrá el control de errores y una notificción de lo que ha ocurrido.\n\nUna vez terminada la comprobación del código de proceso y la obtención de la información de ese proceso se crea una nueva instancia en la base de datos. Esto permitirá llevar un control de las diferentes auditorías que se van haciendo. \n\nLa creación de Una nueva instancia lleva asociado un UUID que permitirá definir cada instancia de manera única. \nComo Resultado Final y parámetro de salida se obtendrá el mensaje `msg.payload `que contendrá las características,el estado inicial y el UUID dela nueva instancia para el control de los diferentes estados por lo que pasa la auditoría y procesar dicha información. \n\nA mayores de los las propiedades que definen una nueva instancia, aparece dos mensajes ERROR.\n - `msg.Error`: El cual es un error detectable y controlable sin utilización de ningun node. Se obtendrá la notificación del que proceso que se ha indicado no existe o no es válido.\n -` msg._error`: Son los errores internos que no se puede apreciar o controlar de forma sencilla y son capturado con el nodo (`CATCH`). Estos errores son los posible errores de conexión con la base de datos que no haya valoreso no se pueda insertar los datos de la nueva instancia.\n\n ",
+        "category": "",
+        "in": [
+            {
+                "x": 20,
+                "y": 160,
+                "wires": [
+                    {
+                        "id": "f235b0c3.425e3"
+                    }
+                ]
+            }
+        ],
+        "out": [
+            {
+                "x": 1880,
+                "y": 140,
+                "wires": [
+                    {
+                        "id": "a87416d5.47adb8",
+                        "port": 0
+                    }
+                ]
+            },
+            {
+                "x": 1880,
+                "y": 200,
+                "wires": [
+                    {
+                        "id": "978e1ddf.8b26d",
+                        "port": 0
+                    }
+                ]
+            }
+        ],
+        "env": [
+            {
+                "name": "process_definition",
+                "type": "str",
+                "value": "",
+                "ui": {
+                    "label": {
+                        "en-US": "Process Definition Code"
+                    },
+                    "type": "input",
+                    "opts": {
+                        "types": [
+                            "str"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "ErrorLaunchType",
+                "type": "str",
+                "value": "1",
+                "ui": {
+                    "icon": "font-awesome/fa-exclamation",
+                    "label": {
+                        "en-US": "ErrorLaunchType"
+                    },
+                    "type": "select",
+                    "opts": {
+                        "opts": [
+                            {
+                                "l": {
+                                    "en-US": "Throw error"
+                                },
+                                "v": "0"
+                            },
+                            {
+                                "l": {
+                                    "en-US": "Send in msg"
+                                },
+                                "v": "1"
+                            }
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "name_data_result",
+                "type": "str",
+                "value": ""
+            }
+        ],
+        "meta": {},
+        "color": "#DDAA99",
+        "outputLabels": [
+            "Output",
+            "Error"
+        ],
+        "icon": "node-red/leveldb.png",
+        "status": {
+            "x": 340,
+            "y": 280,
+            "wires": [
+                {
+                    "id": "7882314f.5c805",
+                    "port": 0
+                }
+            ]
+        }
+    },
+    {
+        "id": "296b80ab.0c68f",
+        "type": "subflow",
+        "name": "Folder purger",
+        "info": "",
+        "category": "",
+        "in": [
+            {
+                "x": 60,
+                "y": 120,
+                "wires": [
+                    {
+                        "id": "48163f6.e6444c"
+                    }
+                ]
+            }
+        ],
+        "out": [],
+        "env": [
+            {
+                "name": "folder",
+                "type": "str",
+                "value": "/data/excel/media",
+                "ui": {
+                    "label": {
+                        "en-US": "Directorio"
+                    },
+                    "type": "input",
+                    "opts": {
+                        "types": [
+                            "str",
+                            "num",
+                            "env"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "maxSize",
+                "type": "num",
+                "value": "100000000",
+                "ui": {
+                    "label": {
+                        "en-US": "Limite de tamaño (en bytes)"
+                    },
+                    "type": "input",
+                    "opts": {
+                        "types": [
+                            "str",
+                            "num",
+                            "env"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "maxDate",
+                "type": "num",
+                "value": "15",
+                "ui": {
+                    "label": {
+                        "en-US": "Limite de días"
+                    },
+                    "type": "input",
+                    "opts": {
+                        "types": [
+                            "str",
+                            "num",
+                            "env"
+                        ]
+                    }
+                }
+            },
+            {
+                "name": "minFiles",
+                "type": "num",
+                "value": "0",
+                "ui": {
+                    "label": {
+                        "en-US": "Limite de archivos mínimos"
+                    },
+                    "type": "input",
+                    "opts": {
+                        "types": [
+                            "str",
+                            "num",
+                            "env"
+                        ]
+                    }
+                }
+            }
+        ],
+        "meta": {},
+        "color": "#DDAA99",
+        "status": {
+            "x": 520,
+            "y": 280,
+            "wires": [
+                {
+                    "id": "3c2b6c59.6b7894",
+                    "port": 0
+                }
+            ]
+        }
+    },
+    {
+        "id": "20127ca.089d584",
+        "type": "group",
+        "z": "53f8a525.723afc",
+        "name": "Instance",
+        "style": {
+            "label": true
+        },
+        "nodes": [
+            "2781668d.ed377a",
+            "15626c08.ecfa04",
+            "1427104e.73e06",
+            "f0158be2.b1d878",
+            "8a54cedd.41f9d",
+            "2a3a7ea1.cbd2b2",
+            "b70f1e2f.0cedb",
+            "36963b58.0f9494",
+            "7a64e7f8.809fa8",
+            "2ba800cf.8a4c1",
+            "2ce7c2fb.29328e",
+            "709168f0.4cc178",
+            "b663c1d4.7428",
+            "49d6851e.fec85c",
+            "3590a195.15a47e",
+            "499c326c.6ab55c",
+            "f1969684.1aa588",
+            "c0dec10.232af4",
+            "8987ecad.2f54",
+            "9a73aad0.36e968",
+            "5b60128b.f5362c",
+            "84bbfc26.0727f",
+            "5f511af.1f189e4"
+        ],
+        "x": 74,
+        "y": 679,
+        "w": 1232,
+        "h": 482
+    },
+    {
+        "id": "f212771.aaaa588",
+        "type": "group",
+        "z": "b57cbec5.0ac86",
+        "name": "Visor listado general de auditorias",
+        "style": {
+            "label": true,
+            "fill": "#e3f3d3",
+            "color": "#000000"
+        },
+        "nodes": [
+            "cce1bc81.592db",
+            "b0239af2.be8328",
+            "6a9df02d.55323"
+        ],
+        "x": 54,
+        "y": 39,
+        "w": 692,
+        "h": 82
+    },
+    {
+        "id": "62ac42df.b5dd9c",
+        "type": "group",
+        "z": "53f8a525.723afc",
+        "name": "Audit",
+        "style": {
+            "label": true
+        },
+        "nodes": [
+            "c016a435.9130a8",
+            "cf1454d.e796fa8",
+            "f09b4a79.08ff98",
+            "cf99de68.17c4d",
+            "ada53925.a1bfd8",
+            "fde46def.634b8",
+            "6cccec5e.2a99b4",
+            "2a667f77.73061",
+            "9d06a7b7.bb28d8",
+            "7b88239a.55b96c",
+            "c3d9cd.9999963",
+            "36834e9c.5a8f82",
+            "577a9cc3.1ca6d4",
+            "52a04ca.a2a2eb4",
+            "b76fcfca.c78e",
+            "99163057.0e2e8",
+            "fc4093a4.76b5b",
+            "81c883c9.ba5cd",
+            "e62d3537.640a38",
+            "811e27ce.7627c8",
+            "74468c27.771434",
+            "180219db.9d8ee6",
+            "eeb4f305.f1ecc",
+            "c1b5786e.461e28",
+            "2ae7fc0c.a1d9a4",
+            "893536c5.4658c8",
+            "24c91b0f.1236f4"
+        ],
+        "x": 94,
+        "y": 139,
+        "w": 1212,
+        "h": 422
+    },
+    {
+        "id": "1765b5e8.3419ba",
+        "type": "mydbConfig",
+        "name": "DFMS localhost",
+        "host": "database",
+        "port": "5432",
+        "database": "dfms",
+        "ssl": false,
+        "max": "10",
+        "min": 1,
+        "idle": "1000"
+    },
+    {
+        "id": "6d29944f.a131dc",
+        "type": "status",
+        "z": "e5bcb1b9.5df64",
+        "name": "",
+        "scope": null,
+        "x": 120,
+        "y": 260,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "494ae109.5f6e9",
+        "type": "mydb",
+        "z": "e5bcb1b9.5df64",
+        "name": "Update/Insert",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "UPDATE public.instance\n\tSET status='{{{msg.state}}}'\n\tWHERE uuid ='{{{msg.instance.uuid}}}'\n\treturning *;\n\t\n\n\t\nINSERT INTO public.instance_event_stream(\nuuid, id_process_definition, status)\nVALUES ('{{{msg.instance.uuid}}}', {{{msg.instance.id}}}, '{{{msg.state}}}')\nreturning *;",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 1100,
+        "y": 60,
+        "wires": [
+            [
+                "7d7d308a.e7c94"
+            ]
+        ]
+    },
+    {
+        "id": "8ecb1355.c21d5",
+        "type": "mydb",
+        "z": "e5bcb1b9.5df64",
+        "name": "Get UUID Data",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "SELECT * FROM public.instance AS I\nLEFT JOIN public.process_definition AS PD ON PD.id=I.id_process_definition\nWHERE I.uuid='{{{msg.uuid}}}' and PD.code= '{{{msg.process}}}';",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 340,
+        "y": 100,
+        "wires": [
+            [
+                "b80f34ff.653b48"
+            ]
+        ]
+    },
+    {
+        "id": "b80f34ff.653b48",
+        "type": "switch",
+        "z": "e5bcb1b9.5df64",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 520,
+        "y": 100,
+        "wires": [
+            [
+                "9f82a4da.53efe8"
+            ],
+            [
+                "8b211697.5d4068"
+            ]
+        ]
+    },
+    {
+        "id": "785a729d.c4427c",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "Read Input",
+        "func": "if (!msg.action){\n    msg.action = env.get('process_definition')\n }\n \n if (!msg.process){\n    msg.process = env.get('process_definition')\n }\nmsg.uuid= msg.req.params.uuid\n//msg.payload.uuid= msg.payload\n//msg.code = env.get('process_definition')\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 170,
+        "y": 100,
+        "wires": [
+            [
+                "8ecb1355.c21d5"
+            ]
+        ]
+    },
+    {
+        "id": "8b211697.5d4068",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "No Exist",
+        "func": "msg.Error = 'NO EXISTS INSTANCE';\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 720,
+        "y": 120,
+        "wires": [
+            [
+                "ce328a29.37c678"
+            ]
+        ],
+        "icon": "node-red/alert.svg"
+    },
+    {
+        "id": "9f82a4da.53efe8",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "Exist. Select Data",
+        "func": "\nmsg.instance={}\nmsg.instance.uuid=msg.payload.rows[0].uuid\nmsg.instance.id=msg.payload.rows[0].id_process_definition\nmsg.instance.description=msg.payload.rows[0].description\nmsg.state=msg.payload.rows[0].status\n\n\n \nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 730,
+        "y": 80,
+        "wires": [
+            [
+                "a7cd2b67.355988"
+            ]
+        ]
+    },
+    {
+        "id": "a7cd2b67.355988",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "State Machine",
+        "func": "msg.Error='';\n\nif (msg.state=='STARTED'){\n switch(msg.action) {\n  case 'SUBMIT':\n   msg.state='PROCESSING';\n    break;\n  case 'CANCEL':\n   msg.state='CANCELED';\n    break;\n  default:\n    msg.Error= 'Invalid Transition';\n}\n    } else \nif (msg.state=='PROCESSING'){\n switch(msg.action) {\n  case 'COMPLETE':\n   msg.state='COMPLETED';\n    break;\n  case 'CANCEL':\n   msg.state='CANCELED';\n    break;\n  default:\n    msg.Error= 'Invalid Transition'; \n }\n} else{\n    msg.Error= 'Invalid State'\n}\n    \n//  block of code to be executed if the condition is false\n\nif (msg.Error==''){\n    return[msg,null];\n} else{\n    return[null, msg];\n}\n\n\n//return msg;",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 920,
+        "y": 80,
+        "wires": [
+            [
+                "494ae109.5f6e9"
+            ],
+            [
+                "ce328a29.37c678"
+            ]
+        ],
+        "icon": "node-red/swap.svg"
+    },
+    {
+        "id": "7d7d308a.e7c94",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "Clear Data",
+        "func": "delete msg.instance;\ndelete msg.action;\ndelete msg.state;\ndelete msg.process;\n//delete msg.ErrorState;\nnode.status({fill:\"green\",shape:\"dot\",text:\"Valid Set State Instance\"}); \nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 1270,
+        "y": 60,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ce328a29.37c678",
+        "type": "switch",
+        "z": "e5bcb1b9.5df64",
+        "name": "Visibility Error",
+        "property": "ErrorLaunchType",
+        "propertyType": "env",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "0",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 1100,
+        "y": 100,
+        "wires": [
+            [
+                "b535a00d.3f50d"
+            ],
+            [
+                "431beff.692121"
+            ]
+        ]
+    },
+    {
+        "id": "b535a00d.3f50d",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "Print Error MSG",
+        "func": "if ((msg.Error== 'Invalid State') || (msg.Error== 'Invalid Transition')){\n    node.status({fill:\"yellow\",shape:\"ring\",text:msg.Error});\n} else if (msg.Error== 'NO EXISTS UUID'){\n    node.status({fill:\"grey\",shape:\"ring\",text:msg.Error});\n} else{\n    node.status({fill:\"red\",shape:\"ring\",text:msg.Error});\n}\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 1280,
+        "y": 100,
+        "wires": [
+            []
+        ],
+        "icon": "node-red/alert.svg"
+    },
+    {
+        "id": "431beff.692121",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "Throw Error",
+        "func": "if ((msg.Error= 'Invalid State') || (msg.Error= 'Invalid Transition')){\n    node.status({fill:\"yellow\",shape:\"ring\",text:msg.Error});\n} else if (msg.Error== 'NO EXISTS UUID'){\n    node.status({fill:\"grey\",shape:\"ring\",text:msg.Error});\n} else{\n    node.status({fill:\"red\",shape:\"ring\",text:msg.Error});\n}\nthrow new Error(msg.Error);",
+        "outputs": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 1270,
+        "y": 140,
+        "wires": [],
+        "icon": "font-awesome/fa-warning"
+    },
+    {
+        "id": "77b0478d.f053a8",
+        "type": "function",
+        "z": "e5bcb1b9.5df64",
+        "name": "Catch Error",
+        "func": "msg.Error = \"Internal fail\"\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 730,
+        "y": 160,
+        "wires": [
+            [
+                "ce328a29.37c678"
+            ]
+        ],
+        "icon": "node-red/alert.svg"
+    },
+    {
+        "id": "d9b30b54.8be4e8",
+        "type": "catch",
+        "z": "e5bcb1b9.5df64",
+        "name": "",
+        "scope": [
+            "494ae109.5f6e9",
+            "8ecb1355.c21d5",
+            "9f82a4da.53efe8"
+        ],
+        "uncaught": false,
+        "x": 570,
+        "y": 160,
+        "wires": [
+            [
+                "77b0478d.f053a8"
+            ]
+        ]
+    },
+    {
+        "id": "32fe0b3a.c72394",
+        "type": "comment",
+        "z": "e5bcb1b9.5df64",
+        "name": "Control de estados",
+        "info": "",
+        "x": 150,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "def85e6b.8b5ef",
+        "type": "comment",
+        "z": "e5bcb1b9.5df64",
+        "name": "Proceso de actualización de estados y control de cambiio de estado de una instancia.",
+        "info": "",
+        "x": 340,
+        "y": 40,
+        "wires": []
+    },
+    {
+        "id": "86104ac0.b59418",
+        "type": "switch",
+        "z": "ec5b7153.50869",
+        "name": "Visibility Error",
+        "property": "ErrorLaunchType",
+        "propertyType": "env",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "0",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 1280,
+        "y": 260,
+        "wires": [
+            [
+                "978e1ddf.8b26d"
+            ],
+            [
+                "59f8952e.8d8bbc"
+            ]
+        ]
+    },
+    {
+        "id": "59f8952e.8d8bbc",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "Throw Error",
+        "func": "node.status({fill:\"red\",shape:\"ring\",text:msg.Error});\nthrow new Error(msg.Error);",
+        "outputs": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 1790,
+        "y": 240,
+        "wires": [],
+        "icon": "font-awesome/fa-warning"
+    },
+    {
+        "id": "7882314f.5c805",
+        "type": "status",
+        "z": "ec5b7153.50869",
+        "name": "",
+        "scope": [
+            "59f8952e.8d8bbc",
+            "eb2d8194.c33d2",
+            "f235b0c3.425e3",
+            "57cc0e9e.509ae",
+            "6565a09c.66cff",
+            "a87416d5.47adb8",
+            "978e1ddf.8b26d"
+        ],
+        "x": 80,
+        "y": 280,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "eb2d8194.c33d2",
+        "type": "mydb",
+        "z": "ec5b7153.50869",
+        "name": "Get Process Data",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "SELECT * FROM process_definition\nWHERE code='{{{msg.process}}}'\n;\n",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 310,
+        "y": 160,
+        "wires": [
+            [
+                "a3b6ba0c.faf6b8"
+            ]
+        ]
+    },
+    {
+        "id": "f235b0c3.425e3",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "Read Input",
+        "func": "\nif (!msg.process){\n    msg.process = env.get('process_definition')\n }\nmsg.message = env.get('name_message')\n//msg.property= {}\n//msg.property.url=env.get('path_localitation')\n//msg.property.name=env.get('name_file')\n\n//msg.code = env.get('process_definition')\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 130,
+        "y": 160,
+        "wires": [
+            [
+                "eb2d8194.c33d2"
+            ]
+        ]
+    },
+    {
+        "id": "57cc0e9e.509ae",
+        "type": "mydb",
+        "z": "ec5b7153.50869",
+        "name": "Insert New intance",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "INSERT INTO public.instance(\n\t id_process_definition,status, description,process_definition,property)\n\tVALUES ({{{msg.instance.id}}},'{{{msg.instance.state}}}','{{{msg.instance.description}}}','{{{msg.json}}}','{{{msg.property}}}')\nreturning*;\n",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 1550,
+        "y": 140,
+        "wires": [
+            [
+                "a87416d5.47adb8"
+            ]
+        ]
+    },
+    {
+        "id": "a3b6ba0c.faf6b8",
+        "type": "switch",
+        "z": "ec5b7153.50869",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 520,
+        "y": 160,
+        "wires": [
+            [
+                "61badd2c.1e6c74"
+            ],
+            [
+                "4a06dd45.3c4194"
+            ]
+        ]
+    },
+    {
+        "id": "61badd2c.1e6c74",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "Exist. Select Data",
+        "func": "msg.json =msg.payload.rows[0]\n//msg.json.id= msg.payload.rows[0].id\n//msg.json.code=msg.payload.rows[0].code\n//msg.json.name=msg.payload.rows[0].name\n//msg.json.description=msg.payload.rows[0].description\n//msg.json.creation_date=msg.payload.rows[0].creation_date\n//msg.json.update_date=msg.payload.rows[0].update_date\n//msg.json.active=msg.payload.rows[0].active\n\nmsg.instance={}\nmsg.instance.id=msg.payload.rows[0].id\nmsg.instance.description=msg.payload.rows[0].description\n\nmsg.instance.state='STARTED'\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 730,
+        "y": 140,
+        "wires": [
+            [
+                "2bbcbe69.a872a2"
+            ]
+        ]
+    },
+    {
+        "id": "a87416d5.47adb8",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "Parse Result",
+        "func": "var name_data_result = env.get('name_data_result')\n\n\nmsg[name_data_result]=msg.payload.rows[0];\ndelete msg.instance;\n/*delete msg.payload.process_definition*/\ndelete msg.json\ndelete msg.data\ndelete msg.name\ndelete msg.property\n//delete msg.property\nnode.status({fill:\"green\",shape:\"dot\",text:\"Valid Process\"});\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 1750,
+        "y": 140,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "db902224.e18a",
+        "type": "comment",
+        "z": "ec5b7153.50869",
+        "name": "Proceso de identificación de auditoría y creación de una nueva instancia",
+        "info": "",
+        "x": 270,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "a38f59a1.3319c8",
+        "type": "comment",
+        "z": "ec5b7153.50869",
+        "name": "Control de estados",
+        "info": "",
+        "x": 110,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "978e1ddf.8b26d",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "No Exist",
+        "func": "node.status({fill:\"yellow\",shape:\"ring\",text:msg.Error});\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 1780,
+        "y": 200,
+        "wires": [
+            []
+        ],
+        "icon": "node-red/alert.svg"
+    },
+    {
+        "id": "e781c5a7.19b628",
+        "type": "catch",
+        "z": "ec5b7153.50869",
+        "name": "",
+        "scope": [
+            "eb2d8194.c33d2",
+            "57cc0e9e.509ae",
+            "61badd2c.1e6c74",
+            "4450d2c1.c50e6c",
+            "779ab8bb.576478"
+        ],
+        "uncaught": false,
+        "x": 650,
+        "y": 260,
+        "wires": [
+            [
+                "fc44900.878d27"
+            ]
+        ]
+    },
+    {
+        "id": "fc44900.878d27",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "Catch Error",
+        "func": "msg.Error = \"Internal fail\"\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 790,
+        "y": 260,
+        "wires": [
+            [
+                "86104ac0.b59418"
+            ]
+        ],
+        "icon": "node-red/alert.svg"
+    },
+    {
+        "id": "4a06dd45.3c4194",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "No Exist",
+        "func": "msg.Error = 'NO EXISTS';\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "x": 800,
+        "y": 220,
+        "wires": [
+            [
+                "86104ac0.b59418"
+            ]
+        ],
+        "icon": "node-red/alert.svg"
+    },
+    {
+        "id": "6ed2b256.b1377c",
+        "type": "comment",
+        "z": "ec5b7153.50869",
+        "name": "Internal Error",
+        "info": "",
+        "x": 770,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "4450d2c1.c50e6c",
+        "type": "json",
+        "z": "ec5b7153.50869",
+        "name": "json_process",
+        "property": "json",
+        "action": "str",
+        "pretty": true,
+        "x": 1370,
+        "y": 140,
+        "wires": [
+            [
+                "57cc0e9e.509ae"
+            ]
+        ]
+    },
+    {
+        "id": "5b8674e2.ac7bcc",
+        "type": "comment",
+        "z": "ec5b7153.50869",
+        "name": "DATA_PROCESS",
+        "info": "En esta parte convertimos a JSON todos los datos/características del proceso seleccionado. Así posteriormente se insertará en la columna de la base de datos en dicho formato.",
+        "x": 730,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "2bbcbe69.a872a2",
+        "type": "mydb",
+        "z": "ec5b7153.50869",
+        "name": "Property_Instance",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "SELECT * FROM public.parameter\nWHERE name = 'document_directory';",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 930,
+        "y": 140,
+        "wires": [
+            [
+                "fc91cd0f.92f4a"
+            ]
+        ]
+    },
+    {
+        "id": "fc91cd0f.92f4a",
+        "type": "function",
+        "z": "ec5b7153.50869",
+        "name": "",
+        "func": "msg.data = msg.payload.rows[0]\n//convertimos la vecha en una string para añadir  al nombre del fichero.\nmsg.name = msg.json.property.template_file\nvar d = new Date();\nvar n = d.toLocaleDateString()\nvar p = n.replace('/','')\nvar o = p.replace('/','')\n\n//Concatenamos nombre y fecha\nvar dir = msg.data.value\nvar name=msg.json.property.template_file\nvar name2 = name.concat('_' , o)\nvar dir2= dir.concat('/' , name2)\nmsg.property ={}\nmsg.property.directory=dir2\n//msg.data =msg.property\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1100,
+        "y": 140,
+        "wires": [
+            [
+                "c928e229.4bc1"
+            ]
+        ]
+    },
+    {
+        "id": "c928e229.4bc1",
+        "type": "json",
+        "z": "ec5b7153.50869",
+        "name": "",
+        "property": "property",
+        "action": "str",
+        "pretty": false,
+        "x": 1230,
+        "y": 140,
+        "wires": [
+            [
+                "4450d2c1.c50e6c"
+            ]
+        ]
+    },
+    {
+        "id": "57e92675.7100d8",
+        "type": "comment",
+        "z": "53f8a525.723afc",
+        "name": "Audit",
+        "info": "En esta parte estarán las CRUD que se refieren a las acciones de las definiciones de auditorías (En la base de datos denominadas pocess_definition)",
+        "x": 130,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "36e22c08.17c204",
+        "type": "comment",
+        "z": "53f8a525.723afc",
+        "name": "Instancia",
+        "info": "En esta parte estarán las CRUD que se refieren a las acciones las instancias de cada una de las auditorías. ",
+        "x": 140,
+        "y": 640,
+        "wires": []
+    },
+    {
+        "id": "2781668d.ed377a",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "url": "audits/:code/instances",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 220,
+        "y": 720,
+        "wires": [
+            [
+                "1427104e.73e06"
+            ]
+        ]
+    },
+    {
+        "id": "15626c08.ecfa04",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 720,
+        "wires": []
+    },
+    {
+        "id": "1427104e.73e06",
+        "type": "mydb",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "SELECT",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "SELECT I.uuid, I.id_process_definition, I.status, I.description, I.creation_date, I.update_date, I.active, I.process_definition, I.property\nFROM public.instance as I\nINNER JOIN public.process_definition as PD ON PD.id = I.id_process_definition and PD.Code='{{{msg.req.params.code}}}' \n\n",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 480,
+        "y": 720,
+        "wires": [
+            [
+                "499c326c.6ab55c"
+            ]
+        ]
+    },
+    {
+        "id": "f0158be2.b1d878",
+        "type": "change",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.rows",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1020,
+        "y": 720,
+        "wires": [
+            [
+                "15626c08.ecfa04"
+            ]
+        ]
+    },
+    {
+        "id": "8a54cedd.41f9d",
+        "type": "catch",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "scope": [
+            "1427104e.73e06"
+        ],
+        "uncaught": false,
+        "x": 150,
+        "y": 1120,
+        "wires": [
+            [
+                "2a3a7ea1.cbd2b2"
+            ]
+        ]
+    },
+    {
+        "id": "2a3a7ea1.cbd2b2",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "(500) Error: Internal Server Error",
+        "statusCode": "500",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1150,
+        "y": 1120,
+        "wires": []
+    },
+    {
+        "id": "b70f1e2f.0cedb",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "url": "/audits/:code/instances/new",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 240,
+        "y": 820,
+        "wires": [
+            [
+                "2ba800cf.8a4c1"
+            ]
+        ]
+    },
+    {
+        "id": "36963b58.0f9494",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 840,
+        "wires": []
+    },
+    {
+        "id": "7a64e7f8.809fa8",
+        "type": "subflow:ec5b7153.50869",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "env": [
+            {
+                "name": "process_definition",
+                "value": "123",
+                "type": "str"
+            }
+        ],
+        "x": 740,
+        "y": 820,
+        "wires": [
+            [
+                "3590a195.15a47e"
+            ],
+            [
+                "5f511af.1f189e4"
+            ]
+        ]
+    },
+    {
+        "id": "2ba800cf.8a4c1",
+        "type": "function",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "func": "msg.process = msg.req.params.code\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 820,
+        "wires": [
+            [
+                "7a64e7f8.809fa8"
+            ]
+        ]
+    },
+    {
+        "id": "2ce7c2fb.29328e",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "url": "/audits/:code/instances/:uuid/action",
+        "method": "put",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 250,
+        "y": 1060,
+        "wires": [
+            [
+                "49d6851e.fec85c",
+                "8cbcb78c.e158e8"
+            ]
+        ]
+    },
+    {
+        "id": "709168f0.4cc178",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 1060,
+        "wires": []
+    },
+    {
+        "id": "b663c1d4.7428",
+        "type": "subflow:e5bcb1b9.5df64",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "env": [
+            {
+                "name": "Action",
+                "value": "SUBMIT",
+                "type": "str"
+            },
+            {
+                "name": "ErrorLaunchType",
+                "value": "0",
+                "type": "str"
+            },
+            {
+                "name": "process_definition",
+                "value": "ABC",
+                "type": "str"
+            }
+        ],
+        "x": 710,
+        "y": 1060,
+        "wires": [
+            [
+                "709168f0.4cc178"
+            ]
+        ]
+    },
+    {
+        "id": "49d6851e.fec85c",
+        "type": "function",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "func": "msg.process = msg.req.params.code\nmsg.action = msg.req.body.Action\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 1060,
+        "wires": [
+            [
+                "b663c1d4.7428"
+            ]
+        ]
+    },
+    {
+        "id": "3590a195.15a47e",
+        "type": "change",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.rows",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1060,
+        "y": 840,
+        "wires": [
+            [
+                "36963b58.0f9494"
+            ]
+        ]
+    },
+    {
+        "id": "499c326c.6ab55c",
+        "type": "switch",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 800,
+        "y": 720,
+        "wires": [
+            [
+                "f0158be2.b1d878"
+            ],
+            [
+                "fa0ce30c.0690e"
+            ]
+        ]
+    },
+    {
+        "id": "fa0ce30c.0690e",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "name": "(204) No Content'",
+        "statusCode": "204",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1210,
+        "y": 760,
+        "wires": []
+    },
+    {
+        "id": "f1969684.1aa588",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "url": "audits/:code/instances/:uuid",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 230,
+        "y": 940,
+        "wires": [
+            [
+                "c0dec10.232af4"
+            ]
+        ]
+    },
+    {
+        "id": "c0dec10.232af4",
+        "type": "mydb",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "SELECT",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "SELECT I.uuid, I.id_process_definition, I.status, I.description, I.creation_date, I.update_date, I.active, I.process_definition, I.property\nFROM public.instance as I\nINNER JOIN public.process_definition as PD ON PD.id = I.id_process_definition and PD.Code='{{{msg.req.params.code}}}' \nWHERE I.uuid = '{{{msg.req.params.uuid}}}' \n\n",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 480,
+        "y": 940,
+        "wires": [
+            [
+                "9a73aad0.36e968"
+            ]
+        ]
+    },
+    {
+        "id": "9a73aad0.36e968",
+        "type": "switch",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 740,
+        "y": 940,
+        "wires": [
+            [
+                "84bbfc26.0727f"
+            ],
+            [
+                "8987ecad.2f54"
+            ]
+        ]
+    },
+    {
+        "id": "84bbfc26.0727f",
+        "type": "change",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.rows",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1040,
+        "y": 920,
+        "wires": [
+            [
+                "5b60128b.f5362c"
+            ]
+        ]
+    },
+    {
+        "id": "5b60128b.f5362c",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 920,
+        "wires": []
+    },
+    {
+        "id": "8987ecad.2f54",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "(204) No Content'",
+        "statusCode": "204",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1190,
+        "y": 980,
+        "wires": []
+    },
+    {
+        "id": "5f511af.1f189e4",
+        "type": "debug",
+        "z": "53f8a525.723afc",
+        "g": "20127ca.089d584",
+        "name": "ERROR",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 890,
+        "y": 880,
+        "wires": []
+    },
+    {
+        "id": "cce1bc81.592db",
+        "type": "http in",
+        "z": "b57cbec5.0ac86",
+        "g": "f212771.aaaa588",
+        "name": "",
+        "url": "/auditsgrid",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 80,
+        "wires": [
+            [
+                "b0239af2.be8328"
+            ]
+        ]
+    },
+    {
+        "id": "b0239af2.be8328",
+        "type": "template",
+        "z": "b57cbec5.0ac86",
+        "g": "f212771.aaaa588",
+        "name": "template",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "<head>\n    <title>DFMS</title>\n    <script src=\"/lib/indexdb/dexie.js\"></script>\n    <script src=\"/src/idb/idb.js\"></script>\n    <script src=\"/lib/Jquery/jquery.min.js\"></script>\n    <script src=\"/src/helpers/DFMS_inputs.js\"></script>\n    <script src=\"/lib/Kendo/kendo.all.min.js\"></script>\n    <link rel=\"stylesheet\" href=\"/lib/Kendo/css/kendo.default-v2.min.css\" />\n\n</head>\n\n<body>\n    <script type=\"text/x-kendo-template\" id=\"template_toolbar\">\n        <div class=\"container_button-refresh\">\n            <a onclick=\"location.reload();\" class=\"k-pager-refresh k-link k-button k-button-icon\" title=\"Refresh\"><span class=\"k-icon k-i-arrow-left\"></span></a>\n        </div>\n    </script>\n\n    <div id=\"container\">\n        <div id=\"grid_auditorias\"></div>\n        <script>\n            var wnd,\n                detailsTemplate;\n\n            $(document).ready(function () {\n                if (DFMS.isMobileDevice()) {\n                    var mainButtons = createElement(\"div\", { \"class\": \"main \", width: \"100%\" }, [\n                        createElement(\"div\", { \"class\": \"main_title \" }, \"Selecciona una opción\"),\n                        createElement(\"div\", { \"class\": \"main_options \" }, [\n                            createElement(\"button\", { \"class\": \"main main_button main_button-create k-button\", width: \"100%\", onclick: 'buildGrid(\"launch\")' }, \"Lanzar Auditorías\"),\n                            createElement(\"button\", { \"class\": \"main main_button main_button-recover k-button\", width: \"100%\", onclick: 'buildGrid(\"recover\")' }, \"Recuperar Auditorías\")\n                        ])\n                    ]\n                    )\n                    var containter = document.getElementById(\"container\")\n                    container.append(mainButtons)\n                } else {\n                    buildGrid()\n                }\n            });\n\n            function buildGrid(type) {\n                var url = \"/audits\"\n                DFMS.loading(true, \"/gif/Loading.gif\")\n                fetch(url, {\n                    method: 'GET',\n                    headers: {\n                        'Accept': 'application/json',\n                        'Content-Type': 'application/json'\n                    }\n                    \n                }).then(function (response) {\n                    if (response.ok) {\n                        return response.json()\n                    } else {\n                        throw \"error\";\n                    }\n                    \n                }).catch((error) => {\n                    console.log(error)\n                    \n                }).then(function (data) {\n                   //se recogen los datos de las audirotias.\n                   //se usa el API para ver las auditorias guardadas en base indexDB\n                   //(v)[se requiere insertar en indexDB una tabla de auditoria, con su code y id al menos]\n                    let getAudit =async()=>{\n                        try {\n                            const dbnames = await  iDB().getAll()\n                            for(var dbn in dbnames){\n                                let db = await iDB().initialize(dbnames[dbn])\n                                let audit = await iDB(db).general().get(\"genericData\")\n                                if(!audit){await iDB().delete(dbnames[dbn]);return;}\n                                let instance =await fetch(`/audits/${audit.auditCode}/instances/${audit.instanceUID}`,\n                                    {\n                                    method: 'GET',\n                                    headers: {\n                                        'Accept': 'application/json',\n                                        'Content-Type': 'application/json'\n                                    }\n                                }).then(function(res){\n                                    if (res.ok) {\n                                        return res.json()\n                                    } else {\n                                        throw \"error\";\n                                    }\n                                    \n                                }).then(function(res){\n                                    console.log(res)\n                                    //const result =res[0] res.reduce((r, o) => new Date(o.creation_date) > new Date(r.creation_date) ? o : r);\n                                    return res[0]\n                                })\n                                console.log(\"audit\",dbnames[dbn])\n                                console.log(\"instance\",instance)\n                                let aux = data.find(d=>{return d.code == audit.auditCode})\n                                if(aux){\n                                    aux.uuid =instance.uuid;\n                                    if(dbnames[dbn] != instance.uuid){\n                                        Dexie.delete(dbnames[dbn]);\n                                    }\n                                }else{\n                                   Dexie.delete(dbnames[dbn]);\n                                }\n                                dbnames[dbn] = aux\n                            }\n                            \n                            return dbnames \n                        } catch (error) {\n                            throw error\n                        }\n                    \n                    }\n                    getAudit().then(msg=>{\n                        console.log(msg)\n                        console.log(data)\n                        selectType(data, \"DFMS_DB\", \"uuid\", function () {\n                                DFMS.loading(false)\n                            })\n                        })\n                        .catch(err=>{console.log(err)})\n\n                    \n                    console.log(data);\n                    async function selectType(data, iDB, parameter, callback) {\n                                $(\".main\").remove()\n                                switch (type) {\n                                    case \"launch\":\n                                        createGrid(data,type)\n                                        break;\n                                    case \"recover\":\n                                        var grid = createGrid([],type)\n                                        data = data.map(d => {\n                                            if(\"uuid\" in d){\n                                               Dexie.exists(d.uuid).then((exists)=>{\n                                                   if(!exists){\n                                                        return \n                                                   }\n                                                   grid.dataSource.add(d)\n                                               })\n                                            }\n                                        })\n                                        break;\n                                    default:\n                                        var grid = createGrid([],type)\n                                        data = data.map(d => {\n                                                Dexie.exists(d.uuid).then((exists)=>{\n                                                   if(!exists){\n                                                        delete d.uuid  \n                                                   }\n                                                   grid.dataSource.add(d)\n                                               })\n                                             \n                                        })\n                                }\n                        callback()\n                        \n                    }\n                    \n                    function createGrid(data,type) {\n                        var grid = $(\"#grid_auditorias\").kendoGrid({\n                            dataSource: {\n                                pageSize: 20,\n                                data: data\n                            },\n                            /*Enable/disable recover buttons*/\n                            dataBound: function (e) {\n                                var grid = $(\"#grid_auditorias\").data(\"kendoGrid\");\n                                var items = e.sender.items();\n                                items.each(function (index) {\n                                    var item = this\n                                    var dataItem = grid.dataItem(this);\n                                    if (dataItem.uuid) {\n                                        $(item).find('.k-state-disabled').removeClass('k-state-disabled')\n                                    }\n                                })\n\n\n                            },\n                            /****   CONFIGURATIONS   ****/\n                            resizable: true,\n                            reorderable: true,\n                            columnMenu: true,\n                            navigatable: true,\n                            allowCopy: true,\n                            height: \"100%\",\n                            mobile:true,\n                            pageable: {\n                                pageSizes: [500, 1000, 2000],\n                                messages: {\n                                    display: \"{0}-{1} de {2} registros\",\n                                    empty: \"No hay registros\",\n                                    itemsPerPage: \"Registros por página\"\n                                }\n                            },\n                            // groupable: {\n                            //     messages: {\n                            //         empty: \"Arrastre el encabezado de una columna y suéltelo aquí para agrupar\"\n                            //     }\n                            // },\n                            toolbar: (type)?(kendo.template($(\"#template_toolbar\").html())):\"\",\n                            filterable: {\n                                messages: {\n                                    and: \"y\",\n                                    or: \"o\",\n                                    filter: \"Aplicar filtro\",\n                                    clear: \"Limpiar filtro\",\n                                    info: \"Filtrar elementos: \"\n                                },\n                                operators: {\n                                    date: {\n                                        gt: \"Después del\",\n                                        lt: \"Antes del\"\n                                    },\n                                    number: {\n                                        eq: \"Igual a\",\n                                        gt: \"Mayor que\",\n                                        lt: \"Menor que\"\n                                    },\n                                    string: {\n                                        eq: \"Es igual a\",\n                                        neq: \"Es diferente de\",\n                                        contains: \"Contiene\"\n                                    }\n                                }\n                            },\n                            sortable: {\n                                mode: \"multiple\",\n                                allowUnsort: true,\n                                showIndexes: true\n                            },\n                            search: true,\n                            columns: [\n                                { field: \"name\", title: \"Auditoría\", width: \"140px\" },\n                                { field: \"description\", title: \"Descripción\", width: \"140px\" },\n                                {\n                                    command: [\n                                        ...(type != \"recover\" ? [{ text: \"Lanzar auditoría\", click: newAudit }] : []),\n                                        ...(type != \"launch\" ? [{ className: \"k-state-disabled recover_button\", text: \"Continuar última auditoría\", click: lastAudit }] : []),\n                                    ],\n                                    title: \" \", width: (type)?\"80px\":\"180px\"\n\n                                }\n                            ]\n                        }).data(\"kendoGrid\");\n                        return grid\n                    }\n                })\n            }\n            \n            function disablePage(element){\n                    var buttons = document.getElementsByClassName('k-button')\n                        for (var i = 0; i < buttons.length; i++) {\n                            $(buttons[i]).kendoButton().data(\"kendoButton\").enable(false);\n                        }\n            }\n            function newAudit(e) {\n                e.preventDefault();\n\n                var dataItem = this.dataItem($(e.currentTarget).closest(\"tr\"));\n                if(dataItem.uuid){\n                    var aux = confirm(\"Si existe una sesión previa, esta se eliminará, deseas continuar?\")\n                    if(!aux){return}\n                    fetch(`/audits/${dataItem.code}/instances/${dataItem.uuid}/action`, {\n                        method: 'PUT',\n                        headers: {\n                            'Accept': 'application/json',\n                            'Content-Type': 'application/json'\n                        },\n                        body: JSON.stringify({Action:\"SUBMIT\"})\n                    })\n                    .then(function (response) {\n                        if (response.ok) {\n                            notify(\"Se ha enviado la peticion correctamente, se eliminará la ultima sesion\")\n                            return response.text()\n                        } else {\n                            notifyError(`Algo ha fallado: \\nError:${response.status} \\n${response.statusText}`)\n                            console.error(response)\n                            throw \"error\";\n                        }\n                    })\n\n                }\n                \n                disablePage()\n                    try{\n                        Dexie.delete(dataItem.uuid).finally(function(){\n                            DFMS.loading(true, \"/gif/Loading.gif\")\n                            window.location.assign(\"/engine/staging/audit?code=\" + dataItem.code);  \n                        })\n                    }catch(err){console.log(\"Error\",err)}\n                \n            }\n            \n            function lastAudit(e) {\n                e.preventDefault();\n                disablePage()\n                var dataItem = this.dataItem($(e.currentTarget).closest(\"tr\"));\n                \n                DFMS.loading(true, \"/gif/Loading.gif\")\n                window.location.assign(\"/engine/staging/audit?code=\" + dataItem.code + \"&last=true\");\n\n            }\n        </script>\n\n    </div>\n\n\n    <style>\n        .main{\n            font-size: 32px;\n        }\n        .main_button {\n            width: 40%;\n            height: 40%;\n            justify-content: space-evenly;\n        }\n\n        .main_options {\n            height: 80%;\n            display: flex;\n            flex-wrap: nowrap;\n            justify-content: space-evenly;\n            align-items: center;\n        }\n\n        .main_title {\n            height: 20%;\n            display: flex;\n            flex-wrap: nowrap;\n            justify-content: space-evenly;\n            align-items: center;\n        }\n        \n.k-command-cell>.k-button {\n    height: 60px;\n    \n}\n\n    </style>\n\n</body>",
+        "output": "str",
+        "x": 480,
+        "y": 80,
+        "wires": [
+            [
+                "6a9df02d.55323"
+            ]
+        ],
+        "info": "# FALTA\n(x)USAR INDEXDB ,\n(v)BUG mostrar data predeterminada ,\n(v)POPUP al CANCELAR y al SUBMIT , \n(v) `loging GIF para niciar la pagina, y para el resultado de las peticiones ( deshabilitará los botones y todo eso)```\n\n\n\n - Los Templates de Kendo funcionan alternando HTML y Javascript utilizando los Hashtag (#)\n - Para insertar una variable del campo data hay que usar #=data# o #:data# donde \"data\" es el objeto\n \n\n El campo Type del excel identifica el tipo de variable a utilizar\n El campo Values del excel limitará los valores disponibles e incluso el Input en el caso de ser un valor \"booleano\" de 2 o 3 elementos(aun que de 3 ya no sea boleano, se pondrán smiles)\n El campo Predeterminated del excel añade un valor inicial a la pregunta( por ejemplo es util en tareas en las que simplemente se necesite verificar cosas NOK  , se añaden en la plantilla todas las preguntas como OK)\n \n Luego los otros campos opcionales como Link o Observation permitirán añadir un boton de enlace o un popup con informacion ( respectivamente )\n Para añadir mas campos de este tipo, habra que editar el Div \"card_question-options\", ubicado en el \"template template_question\". En este template van estos campos asignados a una de las columnas, comprobando si el valor es nulo o noy deshabilitandolo en caso de ser nulo.\n \n\n \n\n"
+    },
+    {
+        "id": "6a9df02d.55323",
+        "type": "http response",
+        "z": "b57cbec5.0ac86",
+        "g": "f212771.aaaa588",
+        "name": "",
+        "statusCode": "200",
+        "headers": {},
+        "x": 660,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "c016a435.9130a8",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "url": "/audits",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 180,
+        "wires": [
+            [
+                "6cccec5e.2a99b4"
+            ]
+        ]
+    },
+    {
+        "id": "cf1454d.e796fa8",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "f09b4a79.08ff98",
+        "type": "mydb",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "SELECT",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "SELECT id, code, name, description, creation_date, update_date, active, property\nFROM public.process_definition\nWHERE active = true {{{msg.where}}}",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 560,
+        "y": 180,
+        "wires": [
+            [
+                "811e27ce.7627c8"
+            ]
+        ]
+    },
+    {
+        "id": "cf99de68.17c4d",
+        "type": "catch",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "scope": [
+            "f09b4a79.08ff98",
+            "7b88239a.55b96c",
+            "52a04ca.a2a2eb4",
+            "81c883c9.ba5cd"
+        ],
+        "uncaught": false,
+        "x": 170,
+        "y": 520,
+        "wires": [
+            [
+                "ada53925.a1bfd8"
+            ]
+        ]
+    },
+    {
+        "id": "ada53925.a1bfd8",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(500) Error: Internal Server Error",
+        "statusCode": "500",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1150,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "fde46def.634b8",
+        "type": "change",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.rows",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1040,
+        "y": 180,
+        "wires": [
+            [
+                "cf1454d.e796fa8"
+            ]
+        ]
+    },
+    {
+        "id": "6cccec5e.2a99b4",
+        "type": "function",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "func": "var q = msg.req.query;\nvar where = \"\"\n\n/*\n - Ejemplo de where completo a construir\n WHERE Id = 2 AND Code like '%WMedium%'\n*/\n\nif ('id' in q) {\n    //where = \"WHERE \" + \"Id = \" + q.id;\n    where = \" AND \" + \"Id = \" + q.id;\n}\n\nif ('code' in q) {\n    //where = where + ((where === \"\") ? \"WHERE \" : \" AND \") + \"Code like '%\" + q.code + \"%'\";\n    where = where + \" AND \" + \"Code like '%\" + q.code + \"%'\";\n}\n\n\nmsg.where = where\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 180,
+        "wires": [
+            [
+                "f09b4a79.08ff98"
+            ]
+        ]
+    },
+    {
+        "id": "2a667f77.73061",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "url": "/audits",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 260,
+        "wires": [
+            [
+                "7b88239a.55b96c"
+            ]
+        ]
+    },
+    {
+        "id": "9d06a7b7.bb28d8",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "7b88239a.55b96c",
+        "type": "mydb",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "INSERT",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "INSERT INTO public.process_definition(\n\tcode, name, description, property)\n\tVALUES ('{{{msg.req.body.code}}}', '{{{msg.req.body.name}}}', '{{{msg.req.body.description}}}', '{{{msg.req.body.property}}}')\n\treturning *;",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 560,
+        "y": 260,
+        "wires": [
+            [
+                "180219db.9d8ee6"
+            ]
+        ]
+    },
+    {
+        "id": "c3d9cd.9999963",
+        "type": "change",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.rows",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1040,
+        "y": 260,
+        "wires": [
+            [
+                "9d06a7b7.bb28d8"
+            ]
+        ]
+    },
+    {
+        "id": "36834e9c.5a8f82",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "url": "/audits",
+        "method": "put",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 340,
+        "wires": [
+            [
+                "52a04ca.a2a2eb4"
+            ]
+        ]
+    },
+    {
+        "id": "577a9cc3.1ca6d4",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "52a04ca.a2a2eb4",
+        "type": "mydb",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "UPDATE",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "UPDATE public.process_definition\n\tSET name='{{{msg.req.body.name}}}'\n\t, description='{{{msg.req.body.description}}}'\n\t, property='{{{msg.req.body.property}}}'\n\tWHERE code='{{{msg.req.body.code}}}'\n\treturning *;",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 560,
+        "y": 340,
+        "wires": [
+            [
+                "eeb4f305.f1ecc"
+            ]
+        ]
+    },
+    {
+        "id": "b76fcfca.c78e",
+        "type": "change",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.rows",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1040,
+        "y": 340,
+        "wires": [
+            [
+                "577a9cc3.1ca6d4"
+            ]
+        ]
+    },
+    {
+        "id": "99163057.0e2e8",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "url": "/audits",
+        "method": "delete",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 200,
+        "y": 420,
+        "wires": [
+            [
+                "81c883c9.ba5cd"
+            ]
+        ]
+    },
+    {
+        "id": "fc4093a4.76b5b",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1220,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "81c883c9.ba5cd",
+        "type": "mydb",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "DELETE",
+        "style": "mustache",
+        "substEnvVars": false,
+        "query": "DELETE FROM public.process_definition\n\tWHERE code='{{{msg.req.body.code}}}'",
+        "mydbConfig": "1765b5e8.3419ba",
+        "x": 560,
+        "y": 420,
+        "wires": [
+            [
+                "c1b5786e.461e28"
+            ]
+        ]
+    },
+    {
+        "id": "e62d3537.640a38",
+        "type": "change",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.rows",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1040,
+        "y": 420,
+        "wires": [
+            [
+                "fc4093a4.76b5b"
+            ]
+        ]
+    },
+    {
+        "id": "811e27ce.7627c8",
+        "type": "switch",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 760,
+        "y": 180,
+        "wires": [
+            [
+                "fde46def.634b8"
+            ],
+            [
+                "74468c27.771434"
+            ]
+        ]
+    },
+    {
+        "id": "74468c27.771434",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(204) No Content'",
+        "statusCode": "204",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1190,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "180219db.9d8ee6",
+        "type": "switch",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 760,
+        "y": 260,
+        "wires": [
+            [
+                "c3d9cd.9999963"
+            ],
+            [
+                "2ae7fc0c.a1d9a4"
+            ]
+        ]
+    },
+    {
+        "id": "eeb4f305.f1ecc",
+        "type": "switch",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 760,
+        "y": 340,
+        "wires": [
+            [
+                "b76fcfca.c78e"
+            ],
+            [
+                "893536c5.4658c8"
+            ]
+        ]
+    },
+    {
+        "id": "c1b5786e.461e28",
+        "type": "switch",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "verify existence",
+        "property": "payload.rowCount",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gte",
+                "v": "1",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 760,
+        "y": 420,
+        "wires": [
+            [
+                "e62d3537.640a38"
+            ],
+            [
+                "24c91b0f.1236f4"
+            ]
+        ]
+    },
+    {
+        "id": "2ae7fc0c.a1d9a4",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(204) No Content'",
+        "statusCode": "204",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1190,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "893536c5.4658c8",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(204) No Content'",
+        "statusCode": "204",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1190,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "24c91b0f.1236f4",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "g": "62ac42df.b5dd9c",
+        "name": "(204) No Content'",
+        "statusCode": "204",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1190,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "b976d029.5bdf5",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "name": "",
+        "url": "/audits/:code/instances/:uuid/media",
+        "method": "post",
+        "upload": true,
+        "swaggerDoc": "",
+        "x": 260,
+        "y": 1340,
+        "wires": [
+            [
+                "6b86b27a.5226bc"
+            ]
+        ]
+    },
+    {
+        "id": "2cba0162.de4f5e",
+        "type": "function",
+        "z": "53f8a525.723afc",
+        "name": "WriteFile",
+        "func": "const fs = global.get(\"fs\")\n\nlet code = msg.payload.Code\nlet uuid = msg.req.params.uuid\nlet dir = msg.constants.folder\n\nlet file = msg.payload.Value\n\n\nif (!fs.existsSync(`${dir}/${uuid}`)){\n    fs.mkdirSync(`${dir}/${uuid}`,{ recursive: true});\n}\n\nfile=file.split(\",\").pop();\n// node.warn(file)\nfs.writeFileSync(`${dir}/${uuid}/${code}`,file,{encoding: 'base64'})\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 700,
+        "y": 1340,
+        "wires": [
+            [
+                "4f591db5.dbb304"
+            ]
+        ]
+    },
+    {
+        "id": "4f591db5.dbb304",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "name": "(200) OK",
+        "statusCode": "200",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1240,
+        "y": 1340,
+        "wires": []
+    },
+    {
+        "id": "ddeac17c.35edd",
+        "type": "comment",
+        "z": "53f8a525.723afc",
+        "name": "Media Files",
+        "info": "Procesamiento de los archivos",
+        "x": 170,
+        "y": 1260,
+        "wires": []
+    },
+    {
+        "id": "6b86b27a.5226bc",
+        "type": "function",
+        "z": "53f8a525.723afc",
+        "name": "Config",
+        "func": "msg.constants={\n    folder:`/data/audits/data/${msg.req.params.uuid}/media`\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 490,
+        "y": 1340,
+        "wires": [
+            [
+                "2cba0162.de4f5e"
+            ]
+        ],
+        "icon": "node-red/cog.svg"
+    },
+    {
+        "id": "68aa87fe.e7d3d8",
+        "type": "function",
+        "z": "296b80ab.0c68f",
+        "name": "Folder find",
+        "func": "try {\n    node.status({fill:\"blue\",shape:\"dot\",text:\"Checking existance\"});\n    var fs = global.get(\"fs\")\n    \nif (fs.existsSync(msg.constants.folder)) {\n    node.status({fill:\"green\",shape:\"dot\",text:\"folder exists\"});\n    return msg\n}\nelse{\n     node.status({fill:\"yellow\",shape:\"dot\",text:\"Not Found\"});\n}\n\n  \n}\ncatch(error) {\n     node.error(error)\n    node.status({fill:\"red\",shape:\"ring\",text:\"error\"});\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 330,
+        "y": 120,
+        "wires": [
+            [
+                "a72db742.6b56b8"
+            ]
+        ]
+    },
+    {
+        "id": "a72db742.6b56b8",
+        "type": "function",
+        "z": "296b80ab.0c68f",
+        "name": "read stats",
+        "func": "try {\n    node.status({fill:\"blue\",shape:\"dot\",text:\"reading stats\"});\n    var fs = global.get(\"fs\")\n    \n    const testFolder = msg.constants.folder;\n    msg.data_limit = msg.constants.maxDate \n    \n    var files =fs.readdir(testFolder, (err, file) => {\n        if(err){node.error(err);}\n        var e=file\n        var length = file.length\n        var index = 0\n        \n        if (length>msg.constants.minFiles ){\n            file=file.forEach(f => {\n                \n                fs.stat(testFolder +\"/\"+f, (err, stats) => {\n                    index+=1\n                    if(err){\n                      node.error(err); //Handle error\n                    }\n                    else {\n                    msg.payload={file:testFolder +\"/\"+f,mtime:stats.mtime,size:stats.size,index:index,length:length,isDir:stats.isDirectory()}\n                    node.send(msg)\n                    if(index==length){node.send({complete:true})}\n                    }\n                });\n            });\n            \n        }\n        else{\n            node.status({fill:\"green\",shape:\"dot\",text:\"nº de archivos : \" + length+\", limite de \"+ msg.constants.minFiles});\n            return\n        }\n\n    });\n       node.status({fill:\"green\",shape:\"dot\",text:\"stats readed\"});\n}\ncatch(error) {\n     node.error(error)\n    node.status({fill:\"red\",shape:\"ring\",text:\"error\"});\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 500,
+        "y": 120,
+        "wires": [
+            [
+                "50d3893f.58e948"
+            ]
+        ]
+    },
+    {
+        "id": "50d3893f.58e948",
+        "type": "function",
+        "z": "296b80ab.0c68f",
+        "name": "filter by dates",
+        "func": "var fs = global.get(\"fs\")\nvar moment = global.get(\"moment\")\n    node.status({fill:\"blue\",shape:\"dot\",text:\"purging by date...\"});\n\nif(msg.complete){\n    node.status({fill:\"blue\",shape:\"dot\",text:\"no more items to purge\"});\n\n    return\n    \n}\n if(moment().subtract(msg.constants.maxDate, 'days').isSameOrAfter(msg.payload.mtime, 'day')){\n     if(msg.payload.isDir){\n         console.log(\"isDIr\")\n        fs.rmdirSync(msg.payload.file, { recursive: true });  \n     }else{\n          console.log(\"is not DIr\")\n      fs.unlink(msg.payload.file, (err) => {\n        if (err) {\n            node.error(\"failed to delete local image:\"+err);\n        } else {\n          //  node.warn(folder[i].file+ ' successfully deleted BY SIZE  ');  \n        }\n    })\n     }\n   \n\n }\nnode.status({fill:\"blue\",shape:\"dot\",text:\"purging by date Ended\"});\n\nreturn msg\n\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 650,
+        "y": 120,
+        "wires": [
+            [
+                "701a8d10.5976a4"
+            ]
+        ]
+    },
+    {
+        "id": "701a8d10.5976a4",
+        "type": "join",
+        "z": "296b80ab.0c68f",
+        "name": "",
+        "mode": "custom",
+        "build": "array",
+        "property": "payload",
+        "propertyType": "msg",
+        "key": "topic",
+        "joiner": "\\n",
+        "joinerType": "str",
+        "accumulate": false,
+        "timeout": "",
+        "count": "",
+        "reduceRight": false,
+        "reduceExp": "",
+        "reduceInit": "",
+        "reduceInitType": "",
+        "reduceFixup": "",
+        "x": 790,
+        "y": 120,
+        "wires": [
+            [
+                "91210164.3f095"
+            ]
+        ]
+    },
+    {
+        "id": "91210164.3f095",
+        "type": "function",
+        "z": "296b80ab.0c68f",
+        "name": "filter by folder size",
+        "func": "var fs = global.get(\"fs\")\nvar moment = global.get(\"moment\")\nnode.status({fill:\"blue\",shape:\"dot\",text:\"purging by size...\"});\nvar maxSize=msg.constants.maxSize//bytes\n\nvar folder=msg.payload.sort(function(a,b) {\n        a = a.mtime\n        b = b.mtime\n    return a > b ? 1 : a < b ? -1 : 0;\n}) \n            \nvar folderSize = 0\nfolder.forEach(e=>{\n    folderSize+=e.size\n})\nmsg.folderSize=folderSize\n\n\n\n\n\nvar sizeExceedBy = (folderSize>maxSize)?folderSize - maxSize:0\nvar i = 0\nvar il = folder.length\nwhile(i<il && sizeExceedBy>0){\n    if(folderSize>=maxSize){\n    sizeExceedBy = sizeExceedBy - folder[i].size\n    if(folder[i].isDir){\n         console.log(\"isDIr\")\n        fs.rmdirSync(folder[i].file, { recursive: true });  \n     }else{\n          console.log(\"is not DIr\")\n      fs.unlink(folder[i].file, (err) => {\n        if (err) {\n            node.error(\"failed to delete local image:\"+err);\n        } else {\n          //  node.warn(folder[i].file+ ' successfully deleted BY SIZE  ');  \n        }\n    })\n   \n }\n\n   \n }\n    i+=1 \n}\nnode.status({fill:\"blue\",shape:\"dot\",text:\"purging by size Ended\"});\nnode.status({text : \"last log size :\" + folderSize + \" bytes\"})\n\n\n\n   return msg",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 970,
+        "y": 120,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "3c2b6c59.6b7894",
+        "type": "status",
+        "z": "296b80ab.0c68f",
+        "name": "",
+        "scope": null,
+        "x": 370,
+        "y": 280,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "48163f6.e6444c",
+        "type": "function",
+        "z": "296b80ab.0c68f",
+        "name": "Config",
+        "func": "\nconst neededKeys = ['folder', 'maxSize', 'maxDate','minFiles'];\nif(msg.constants &&  neededKeys.every((key )=>{ Object.keys(msg.constants).includes(key)})){\n    return msg\n}\n\nmsg.constants={\n    folder:env.get(\"folder\"),\n    maxSize: env.get(\"maxSize\"),\n    maxDate: env.get(\"maxDate\"),\n    minFiles:env.get(\"minFiles\")\n}\n// en caso de pasr el tamaño asignado, borrará elementos hasta alcanzar el tamaño asignado.\n// en caso de sobrepasar la fecha acordada, borrará elementos hasta alcanzar la fecha\n// en ambos casos se borraran los elemntos mas antiguos\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 190,
+        "y": 120,
+        "wires": [
+            [
+                "68aa87fe.e7d3d8"
+            ]
+        ],
+        "icon": "node-red/cog.svg"
+    },
+    {
+        "id": "c49767dd.5cdf18",
+        "type": "subflow:296b80ab.0c68f",
+        "z": "53f8a525.723afc",
+        "name": "",
+        "env": [
+            {
+                "name": "folder",
+                "value": "/data/audits/media",
+                "type": "str"
+            }
+        ],
+        "x": 520,
+        "y": 1400,
+        "wires": [],
+        "inputLabels": [
+            "msg.constants [file,maxDate,maxSize,minFiles]"
+        ],
+        "icon": "font-awesome/fa-folder-open"
+    },
+    {
+        "id": "31d38642.3dd26a",
+        "type": "inject",
+        "z": "53f8a525.723afc",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "00 12 * * 1,2,3,4,5",
+        "once": false,
+        "onceDelay": "30",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 190,
+        "y": 1400,
+        "wires": [
+            [
+                "c49767dd.5cdf18"
+            ]
+        ]
+    },
+    {
+        "id": "97253023.9b558",
+        "type": "http in",
+        "z": "53f8a525.723afc",
+        "name": "",
+        "url": "/audits/:code/instances/:uuid/media",
+        "method": "get",
+        "upload": true,
+        "swaggerDoc": "",
+        "x": 250,
+        "y": 1300,
+        "wires": [
+            [
+                "a00cd352.a2d6"
+            ]
+        ]
+    },
+    {
+        "id": "a00cd352.a2d6",
+        "type": "function",
+        "z": "53f8a525.723afc",
+        "name": "Config",
+        "func": "msg.constants={\n    folder:`/data/audits/data/${msg.req.params.uuid}/media`\n}\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 490,
+        "y": 1300,
+        "wires": [
+            [
+                "cdad1df5.3c1d5"
+            ]
+        ],
+        "icon": "node-red/cog.svg"
+    },
+    {
+        "id": "cdad1df5.3c1d5",
+        "type": "function",
+        "z": "53f8a525.723afc",
+        "name": "readFile",
+        "func": "const fs = global.get(\"fs\")\n\nlet code = msg.req.params.code\nlet uuid = msg.req.params.uuid\nlet dir = msg.constants.folder\n\nlet file = msg.req.query.file\nif(file){\n    let data = fs.readFileSync(`${dir}/${uuid}/${file}`,{encoding: 'base64'})\n    msg.payload = {\n        file,\n        data\n        \n    }\n\n}else{\n    if(fs.existsSync(`${dir}/${uuid}`)){\n    msg.payload = fs.readdirSync(`${dir}/${uuid}`)\n    }else{\n        msg.payload = \"No existe directorio\"\n        msg.statusCode =204\n    }\n    \n\n}\n\n\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 700,
+        "y": 1300,
+        "wires": [
+            [
+                "20b65e9b.0e9752"
+            ]
+        ]
+    },
+    {
+        "id": "20b65e9b.0e9752",
+        "type": "http response",
+        "z": "53f8a525.723afc",
+        "name": "OK",
+        "statusCode": "",
+        "headers": {
+            "content-type": "application/json"
+        },
+        "x": 1230,
+        "y": 1300,
+        "wires": []
+    },
+    {
+        "id": "8cbcb78c.e158e8",
+        "type": "debug",
+        "z": "53f8a525.723afc",
+        "name": "",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 510,
+        "y": 1180,
+        "wires": []
+    }
+]
